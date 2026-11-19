@@ -1,0 +1,404 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HELPERS ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailKey(emailKey) {
+      return emailKey is string && emailKey.size() >= 5 && emailKey.size() <= 254 &&
+             emailKey.matches('^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    function isBootstrapAdmin() {
+      return isSignedIn() &&
+             request.auth.token.email_verified == true &&
+             request.auth.token.email == 'asifalquresh@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrapAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'
+      );
+    }
+
+    function isAdminOrTreasurer() {
+      return isAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['ADMIN', 'TREASURER']
+      );
+    }
+
+    function hasRoleGrant(role) {
+      return isSignedIn() &&
+             request.auth.token.email_verified == true &&
+             exists(/databases/$(database)/documents/role_grants/$(request.auth.token.email)) &&
+             get(/databases/$(database)/documents/role_grants/$(request.auth.token.email)).data.role == role;
+    }
+
+    function isValidRole(role) {
+      return role is string && role in ['ADMIN', 'TREASURER', 'MEMBER'];
+    }
+
+    function isValidFoundationId(fid) {
+      return fid is string && fid == 'zariya_khair_main';
+    }
+
+    // --- VALIDATION HELPERS ---
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 254 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 100 &&
+             isValidRole(data.role) &&
+             (!('fcmToken' in data) || (data.fcmToken is string && data.fcmToken.size() <= 512)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidRoleGrant(data) {
+      return isValidFoundationId(data.foundationId) &&
+             data.email is string && data.email.size() >= 5 && data.email.size() <= 254 &&
+             isValidRole(data.role) &&
+             data.assignedByUid is string && data.assignedByUid.size() >= 1 && data.assignedByUid.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidMember(data) {
+      return isValidFoundationId(data.foundationId) &&
+             data.fullName is string && data.fullName.size() >= 1 && data.fullName.size() <= 100 &&
+             data.village is string && data.village.size() >= 1 && data.village.size() <= 100 &&
+             data.tehsil is string && data.tehsil.size() >= 1 && data.tehsil.size() <= 100 &&
+             data.district is string && data.district.size() >= 1 && data.district.size() <= 100 &&
+             data.city is string && data.city.size() >= 1 && data.city.size() <= 100 &&
+             isValidRole(data.role) &&
+             data.active is bool &&
+             data.joinedDateMillis is int && data.joinedDateMillis > 0 &&
+             (!('ownerUid' in data) || (data.ownerUid is string && data.ownerUid.size() <= 128)) &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidMemberContact(data) {
+      return data.mobileNumber is string && data.mobileNumber.size() >= 5 && data.mobileNumber.size() <= 25 &&
+             data.address is string && data.address.size() >= 1 && data.address.size() <= 300 &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 254)) &&
+             (!('ownerUid' in data) || (data.ownerUid is string && data.ownerUid.size() <= 128)) &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidDonation(data) {
+      return isValidFoundationId(data.foundationId) &&
+             data.memberId is string && data.memberId.size() >= 1 && data.memberId.size() <= 128 &&
+             data.memberName is string && data.memberName.size() >= 1 && data.memberName.size() <= 100 &&
+             (data.amount is int || data.amount is float) && data.amount > 0 &&
+             data.dateMillis is int && data.dateMillis > 0 &&
+             data.paymentMethod is string && data.paymentMethod in ['CASH', 'UPI', 'BANK_TRANSFER', 'CHEQUE'] &&
+             data.transactionId is string && data.transactionId.size() >= 1 && data.transactionId.size() <= 120 &&
+             (!('notes' in data) || (data.notes is string && data.notes.size() <= 500)) &&
+             data.recordedByUid is string && data.recordedByUid.size() >= 1 && data.recordedByUid.size() <= 128 &&
+             data.recordedByName is string && data.recordedByName.size() >= 1 && data.recordedByName.size() <= 100 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidExpense(data) {
+      return isValidFoundationId(data.foundationId) &&
+             (data.amount is int || data.amount is float) && data.amount > 0 &&
+             data.purpose is string && data.purpose.size() >= 1 && data.purpose.size() <= 200 &&
+             data.beneficiaryName is string && data.beneficiaryName.size() >= 1 && data.beneficiaryName.size() <= 120 &&
+             data.village is string && data.village.size() >= 1 && data.village.size() <= 100 &&
+             data.city is string && data.city.size() >= 1 && data.city.size() <= 100 &&
+             data.dateMillis is int && data.dateMillis > 0 &&
+             (!('receiptPhotoPath' in data) || (data.receiptPhotoPath is string && data.receiptPhotoPath.size() <= 500)) &&
+             (!('receiptThumbnailBase64' in data) || (data.receiptThumbnailBase64 is string && data.receiptThumbnailBase64.size() <= 150000)) &&
+             data.recordedByUid is string && data.recordedByUid.size() >= 1 && data.recordedByUid.size() <= 128 &&
+             data.recordedByName is string && data.recordedByName.size() >= 1 && data.recordedByName.size() <= 100 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAnnouncement(data) {
+      return isValidFoundationId(data.foundationId) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 150 &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 2000 &&
+             data.type is string && data.type in ['ANNOUNCEMENT', 'MEETING', 'URGENT'] &&
+             (!('meetingDateMillis' in data) || (data.meetingDateMillis is int && data.meetingDateMillis >= 0)) &&
+             (!('meetingLocation' in data) || (data.meetingLocation is string && data.meetingLocation.size() <= 200)) &&
+             data.postedByUid is string && data.postedByUid.size() >= 1 && data.postedByUid.size() <= 128 &&
+             data.postedByName is string && data.postedByName.size() >= 1 && data.postedByName.size() <= 100 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAuditLog(data) {
+      return isValidFoundationId(data.foundationId) &&
+             data.actorUid is string && data.actorUid.size() >= 1 && data.actorUid.size() <= 128 &&
+             data.actorName is string && data.actorName.size() >= 1 && data.actorName.size() <= 100 &&
+             isValidRole(data.actorRole) &&
+             data.action is string && data.action in ['CREATE', 'UPDATE', 'DELETE', 'ROLE_CHANGE', 'EXPORT'] &&
+             data.targetCollection is string && data.targetCollection.size() >= 1 && data.targetCollection.size() <= 60 &&
+             data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+             data.summary is string && data.summary.size() >= 1 && data.summary.size() <= 500 &&
+             data.timestampMillis is int && data.timestampMillis > 0 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // --- COLLECTIONS ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.uid == request.auth.uid || isBootstrapAdmin());
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isOwner(userId) &&
+                       incoming().uid == request.auth.uid &&
+                       incoming().keys().hasAll(['uid', 'email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['uid', 'email', 'displayName', 'role', 'fcmToken', 'createdAt', 'updatedAt']) &&
+                       isValidUser(incoming()) &&
+                       (
+                         incoming().role == 'MEMBER' ||
+                         (incoming().role == 'ADMIN' && isBootstrapAdmin()) ||
+                         hasRoleGrant(incoming().role)
+                       );
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidUser(incoming()) &&
+                       incoming().uid == existing().uid &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         (
+                           isOwner(userId) &&
+                           incoming().role == existing().role &&
+                           incoming().email == existing().email &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'fcmToken', 'updatedAt'])
+                         ) ||
+                         (
+                           isAdmin() &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['role', 'displayName', 'updatedAt'])
+                         )
+                       );
+
+      allow delete: if false;
+    }
+
+    match /role_grants/{emailKey} {
+      allow get: if isSignedIn() && isValidEmailKey(emailKey) &&
+                    ((request.auth.token.email_verified == true && request.auth.token.email == emailKey) || isAdmin());
+      allow list: if isSignedIn() && resource.data.foundationId == 'zariya_khair_main' &&
+                     (isBootstrapAdmin() || resource.data.assignedByUid == request.auth.uid);
+
+      allow create: if isSignedIn() &&
+                       isValidEmailKey(emailKey) &&
+                       incoming().keys().hasAll(['foundationId', 'email', 'role', 'assignedByUid', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['foundationId', 'email', 'role', 'assignedByUid', 'createdAt', 'updatedAt']) &&
+                       isValidRoleGrant(incoming()) &&
+                       incoming().assignedByUid == request.auth.uid &&
+                       isAdmin();
+
+      allow update: if isSignedIn() &&
+                       isValidEmailKey(emailKey) &&
+                       isValidRoleGrant(incoming()) &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().foundationId == existing().foundationId &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['role', 'assignedByUid', 'updatedAt']) &&
+                       isAdmin();
+
+      allow delete: if isSignedIn() && isValidEmailKey(emailKey) && isAdmin();
+    }
+
+    match /members/{memberId} {
+      allow get: if isSignedIn() && isValidId(memberId) && resource.data.foundationId == 'zariya_khair_main';
+      allow list: if isSignedIn() && resource.data.foundationId == 'zariya_khair_main';
+
+      allow create: if isSignedIn() &&
+                       isValidId(memberId) &&
+                       incoming().keys().hasAll(['foundationId', 'fullName', 'village', 'tehsil', 'district', 'city', 'role', 'active', 'joinedDateMillis', 'createdByUid', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['foundationId', 'fullName', 'village', 'tehsil', 'district', 'city', 'role', 'active', 'joinedDateMillis', 'ownerUid', 'createdByUid', 'createdAt', 'updatedAt']) &&
+                       isValidMember(incoming()) &&
+                       incoming().createdByUid == request.auth.uid &&
+                       isAdmin();
+
+      allow update: if isSignedIn() &&
+                       isValidId(memberId) &&
+                       isValidMember(incoming()) &&
+                       incoming().createdByUid == existing().createdByUid &&
+                       incoming().foundationId == existing().foundationId &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         (
+                           isAdmin() &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'village', 'tehsil', 'district', 'city', 'role', 'active', 'joinedDateMillis', 'ownerUid', 'updatedAt'])
+                         ) ||
+                         (
+                           'ownerUid' in existing() &&
+                           existing().ownerUid == request.auth.uid &&
+                           incoming().role == existing().role &&
+                           incoming().active == existing().active &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'village', 'tehsil', 'district', 'city', 'updatedAt'])
+                         )
+                       );
+
+      allow delete: if isSignedIn() && isValidId(memberId) && isAdmin();
+
+      match /private/{docId} {
+        allow get: if isSignedIn() && isValidId(memberId) && docId == 'contact' &&
+                      (
+                        ('ownerUid' in resource.data && resource.data.ownerUid == request.auth.uid) ||
+                        resource.data.createdByUid == request.auth.uid ||
+                        isAdminOrTreasurer()
+                      );
+        allow list: if isSignedIn() && isValidId(memberId) &&
+                       (
+                         ('ownerUid' in resource.data && resource.data.ownerUid == request.auth.uid) ||
+                         resource.data.createdByUid == request.auth.uid ||
+                         isBootstrapAdmin()
+                       );
+
+        allow create: if isSignedIn() &&
+                         isValidId(memberId) &&
+                         docId == 'contact' &&
+                         incoming().keys().hasAll(['mobileNumber', 'address', 'createdByUid', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['mobileNumber', 'address', 'email', 'ownerUid', 'createdByUid', 'createdAt', 'updatedAt']) &&
+                         isValidMemberContact(incoming()) &&
+                         incoming().createdByUid == request.auth.uid &&
+                         isAdmin();
+
+        allow update: if isSignedIn() &&
+                         isValidId(memberId) &&
+                         docId == 'contact' &&
+                         isValidMemberContact(incoming()) &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         (
+                           (
+                             isAdmin() &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['mobileNumber', 'address', 'email', 'ownerUid', 'updatedAt'])
+                           ) ||
+                           (
+                             'ownerUid' in existing() &&
+                             existing().ownerUid == request.auth.uid &&
+                             incoming().diff(existing()).affectedKeys().hasOnly(['mobileNumber', 'address', 'email', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(memberId) && docId == 'contact' && isAdmin();
+      }
+    }
+
+    match /donations/{donationId} {
+      allow get: if isSignedIn() && isValidId(donationId) && resource.data.foundationId == 'zariya_khair_main';
+      allow list: if isSignedIn() && resource.data.foundationId == 'zariya_khair_main';
+
+      allow create: if isSignedIn() &&
+                       isValidId(donationId) &&
+                       incoming().keys().hasAll(['foundationId', 'memberId', 'memberName', 'amount', 'dateMillis', 'paymentMethod', 'transactionId', 'recordedByUid', 'recordedByName', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['foundationId', 'memberId', 'memberName', 'amount', 'dateMillis', 'paymentMethod', 'transactionId', 'notes', 'recordedByUid', 'recordedByName', 'createdAt', 'updatedAt']) &&
+                       isValidDonation(incoming()) &&
+                       incoming().recordedByUid == request.auth.uid &&
+                       isAdminOrTreasurer();
+
+      allow update: if isSignedIn() &&
+                       isValidId(donationId) &&
+                       isValidDonation(incoming()) &&
+                       incoming().recordedByUid == existing().recordedByUid &&
+                       incoming().foundationId == existing().foundationId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['memberId', 'memberName', 'amount', 'dateMillis', 'paymentMethod', 'transactionId', 'notes', 'updatedAt']) &&
+                       isAdminOrTreasurer();
+
+      allow delete: if isSignedIn() && isValidId(donationId) && isAdmin();
+    }
+
+    match /expenses/{expenseId} {
+      allow get: if isSignedIn() && isValidId(expenseId) && resource.data.foundationId == 'zariya_khair_main';
+      allow list: if isSignedIn() && resource.data.foundationId == 'zariya_khair_main';
+
+      allow create: if isSignedIn() &&
+                       isValidId(expenseId) &&
+                       incoming().keys().hasAll(['foundationId', 'amount', 'purpose', 'beneficiaryName', 'village', 'city', 'dateMillis', 'recordedByUid', 'recordedByName', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['foundationId', 'amount', 'purpose', 'beneficiaryName', 'village', 'city', 'dateMillis', 'receiptPhotoPath', 'receiptThumbnailBase64', 'recordedByUid', 'recordedByName', 'createdAt', 'updatedAt']) &&
+                       isValidExpense(incoming()) &&
+                       incoming().recordedByUid == request.auth.uid &&
+                       isAdminOrTreasurer();
+
+      allow update: if isSignedIn() &&
+                       isValidId(expenseId) &&
+                       isValidExpense(incoming()) &&
+                       incoming().recordedByUid == existing().recordedByUid &&
+                       incoming().foundationId == existing().foundationId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['amount', 'purpose', 'beneficiaryName', 'village', 'city', 'dateMillis', 'receiptPhotoPath', 'receiptThumbnailBase64', 'updatedAt']) &&
+                       isAdminOrTreasurer();
+
+      allow delete: if isSignedIn() && isValidId(expenseId) && isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow get: if isSignedIn() && isValidId(announcementId) && resource.data.foundationId == 'zariya_khair_main';
+      allow list: if isSignedIn() && resource.data.foundationId == 'zariya_khair_main';
+
+      allow create: if isSignedIn() &&
+                       isValidId(announcementId) &&
+                       incoming().keys().hasAll(['foundationId', 'title', 'message', 'type', 'postedByUid', 'postedByName', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['foundationId', 'title', 'message', 'type', 'meetingDateMillis', 'meetingLocation', 'postedByUid', 'postedByName', 'createdAt', 'updatedAt']) &&
+                       isValidAnnouncement(incoming()) &&
+                       incoming().postedByUid == request.auth.uid &&
+                       isAdminOrTreasurer();
+
+      allow update: if isSignedIn() &&
+                       isValidId(announcementId) &&
+                       isValidAnnouncement(incoming()) &&
+                       incoming().postedByUid == existing().postedByUid &&
+                       incoming().foundationId == existing().foundationId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['title', 'message', 'type', 'meetingDateMillis', 'meetingLocation', 'updatedAt']) &&
+                       isAdminOrTreasurer();
+
+      allow delete: if isSignedIn() && isValidId(announcementId) && isAdmin();
+    }
+
+    match /audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && resource.data.foundationId == 'zariya_khair_main';
+      allow list: if isSignedIn() && resource.data.foundationId == 'zariya_khair_main';
+
+      allow create: if isSignedIn() &&
+                       isValidId(logId) &&
+                       incoming().keys().hasAll(['foundationId', 'actorUid', 'actorName', 'actorRole', 'action', 'targetCollection', 'targetId', 'summary', 'timestampMillis', 'createdAt']) &&
+                       incoming().keys().hasOnly(['foundationId', 'actorUid', 'actorName', 'actorRole', 'action', 'targetCollection', 'targetId', 'summary', 'timestampMillis', 'createdAt']) &&
+                       isValidAuditLog(incoming()) &&
+                       incoming().actorUid == request.auth.uid;
+
+      allow update, delete: if false;
+    }
+  }
+}

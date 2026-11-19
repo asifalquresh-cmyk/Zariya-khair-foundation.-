@@ -1,0 +1,6 @@
+{
+  "name": "Zariya Khair Foundation",
+  "description": "Foundation management app for members, donations, expenses, village/city charity reports, announcements, and role-based audit history.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

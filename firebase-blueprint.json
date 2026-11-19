@@ -1,0 +1,180 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Authenticated foundation user account and assigned RBAC role.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "TREASURER", "MEMBER"] },
+        "fcmToken": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["uid", "email", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "RoleGrant": {
+      "title": "RoleGrant",
+      "description": "Pre-assigned role grant keyed by verified email.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "TREASURER", "MEMBER"] },
+        "assignedByUid": { "type": "string" },
+        "foundationId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "assignedByUid", "foundationId", "createdAt", "updatedAt"]
+    },
+    "MemberDirectory": {
+      "title": "MemberDirectory",
+      "description": "Foundation member public directory record (non-PII).",
+      "type": "object",
+      "properties": {
+        "foundationId": { "type": "string" },
+        "fullName": { "type": "string" },
+        "village": { "type": "string" },
+        "tehsil": { "type": "string" },
+        "district": { "type": "string" },
+        "city": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "TREASURER", "MEMBER"] },
+        "active": { "type": "boolean" },
+        "joinedDateMillis": { "type": "integer" },
+        "ownerUid": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["foundationId", "fullName", "village", "tehsil", "district", "city", "role", "active", "joinedDateMillis", "createdByUid", "createdAt", "updatedAt"]
+    },
+    "MemberContact": {
+      "title": "MemberContact",
+      "description": "Isolated PII contact record for a foundation member.",
+      "type": "object",
+      "properties": {
+        "mobileNumber": { "type": "string" },
+        "address": { "type": "string" },
+        "email": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["mobileNumber", "address", "createdByUid", "createdAt", "updatedAt"]
+    },
+    "Donation": {
+      "title": "Donation",
+      "description": "Member donation record in the transparent foundation ledger.",
+      "type": "object",
+      "properties": {
+        "foundationId": { "type": "string" },
+        "memberId": { "type": "string" },
+        "memberName": { "type": "string" },
+        "amount": { "type": "number" },
+        "dateMillis": { "type": "integer" },
+        "paymentMethod": { "type": "string", "enum": ["CASH", "UPI", "BANK_TRANSFER", "CHEQUE"] },
+        "transactionId": { "type": "string" },
+        "notes": { "type": "string" },
+        "recordedByUid": { "type": "string" },
+        "recordedByName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["foundationId", "memberId", "memberName", "amount", "dateMillis", "paymentMethod", "transactionId", "recordedByUid", "recordedByName", "createdAt", "updatedAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Charity expense and beneficiary relief record.",
+      "type": "object",
+      "properties": {
+        "foundationId": { "type": "string" },
+        "amount": { "type": "number" },
+        "purpose": { "type": "string" },
+        "beneficiaryName": { "type": "string" },
+        "village": { "type": "string" },
+        "city": { "type": "string" },
+        "dateMillis": { "type": "integer" },
+        "receiptPhotoPath": { "type": "string" },
+        "receiptThumbnailBase64": { "type": "string" },
+        "recordedByUid": { "type": "string" },
+        "recordedByName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["foundationId", "amount", "purpose", "beneficiaryName", "village", "city", "dateMillis", "recordedByUid", "recordedByName", "createdAt", "updatedAt"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Foundation announcement or scheduled meeting notification.",
+      "type": "object",
+      "properties": {
+        "foundationId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["ANNOUNCEMENT", "MEETING", "URGENT"] },
+        "meetingDateMillis": { "type": "integer" },
+        "meetingLocation": { "type": "string" },
+        "postedByUid": { "type": "string" },
+        "postedByName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["foundationId", "title", "message", "type", "postedByUid", "postedByName", "createdAt", "updatedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable append-only audit trail entry.",
+      "type": "object",
+      "properties": {
+        "foundationId": { "type": "string" },
+        "actorUid": { "type": "string" },
+        "actorName": { "type": "string" },
+        "actorRole": { "type": "string", "enum": ["ADMIN", "TREASURER", "MEMBER"] },
+        "action": { "type": "string", "enum": ["CREATE", "UPDATE", "DELETE", "ROLE_CHANGE", "EXPORT"] },
+        "targetCollection": { "type": "string" },
+        "targetId": { "type": "string" },
+        "summary": { "type": "string" },
+        "timestampMillis": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["foundationId", "actorUid", "actorName", "actorRole", "action", "targetCollection", "targetId", "summary", "timestampMillis", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Authenticated user accounts and assigned RBAC roles."
+    },
+    "/role_grants/{emailKey}": {
+      "schema": { "$ref": "#/entities/RoleGrant" },
+      "description": "Pre-assigned role grants by verified email."
+    },
+    "/members/{memberId}": {
+      "schema": { "$ref": "#/entities/MemberDirectory" },
+      "description": "Foundation member public directory."
+    },
+    "/members/{memberId}/private/{docId}": {
+      "schema": { "$ref": "#/entities/MemberContact" },
+      "description": "Restricted PII contact details for foundation members."
+    },
+    "/donations/{donationId}": {
+      "schema": { "$ref": "#/entities/Donation" },
+      "description": "Foundation donation ledger."
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Foundation charity expenses and relief work."
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "Foundation announcements and meeting notices."
+    },
+    "/audit_logs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable audit trail for transparency."
+    }
+  }
+}
